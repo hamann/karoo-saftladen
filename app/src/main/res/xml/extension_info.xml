@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Saftladen neither scans for devices nor provides data types or a map layer; it only
+  observes ride state and the saved device list, so all capability flags stay off.
+-->
+<ExtensionInfo
+    displayName="@string/extension_name"
+    icon="@drawable/ic_saftladen"
+    id="saftladen"
+    scansDevices="false"
+    mapLayer="false"
+    fitFile="false">
+    <BonusAction
+        actionId="report-now"
+        displayName="@string/action_report_now" />
+</ExtensionInfo>

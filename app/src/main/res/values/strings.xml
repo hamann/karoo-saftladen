@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Saftladen</string>
+    <string name="extension_name">Saftladen – sensor battery report</string>
+    <string name="action_report_now">Send battery report</string>
+</resources>
