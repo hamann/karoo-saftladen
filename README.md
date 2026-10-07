@@ -157,6 +157,82 @@ Then in the Saftladen app on the Karoo: set the URL, **Save settings**, **Send t
 now**. You can also assign the *Send battery report* bonus action to a controller button to
 trigger a report mid-ride.
 
+## Home Assistant as the endpoint
+
+A webhook is the right fit: the webhook id *is* the credential, so Saftladen's auth header
+fields stay empty. (The REST API at `/api/states/…` is not usable here — it expects a
+`{"state": …, "attributes": …}` body, and Saftladen posts its own shape.)
+
+Pick a long random id, put it in `secrets.yaml` as `karoo_webhook_id`, and add
+trigger-based template sensors:
+
+```yaml
+# configuration.yaml
+template:
+  - triggers:
+      - trigger: webhook
+        webhook_id: !secret karoo_webhook_id
+        allowed_methods: [POST]
+        local_only: true
+    sensor:
+      # The head unit, the one reading that is a real percentage.
+      - name: Karoo battery
+        unique_id: karoo_battery
+        state: "{{ trigger.json.karoo.batteryPercent }}"
+        # `is number` rejects both a null level and a field that is absent entirely
+        # (an older report, a future schema); `is not none` would let the latter through.
+        availability: "{{ trigger.json.karoo.batteryPercent is number }}"
+        unit_of_measurement: "%"
+        device_class: battery
+        state_class: measurement
+        attributes:
+          reported_at: "{{ trigger.json.createdAt }}"
+          report_trigger: "{{ trigger.json.trigger }}"
+          sensors: "{{ trigger.json.sensors }}"
+
+      # One sensor by name. No device_class: the state is a word, not a number.
+      - name: Di2 battery
+        unique_id: karoo_di2_battery
+        state: >
+          {{ trigger.json.sensors
+             | selectattr('name', 'eq', 'Di2 1249')
+             | map(attribute='battery') | first | default('unknown', true) }}
+
+      # Whatever needs charging, so one automation can cover every sensor.
+      - name: Bike batteries needing attention
+        unique_id: karoo_batteries_low
+        state: >
+          {{ trigger.json.sensors
+             | selectattr('battery', 'in', ['LOW', 'CRITICAL'])
+             | map(attribute='name') | list | join(', ') | default('none', true) }}
+```
+
+In the Saftladen app set the URL to
+`http://homeassistant.local:8123/api/webhook/<your-webhook-id>` and leave both auth header
+fields blank. Reload templates (or restart HA) before testing.
+
+**Home Assistant answers `200 OK` even when it did nothing with your report.** Checked
+against [`webhook/__init__.py`][ha-webhook]: an unregistered id, a `local_only` rejection,
+and an exception inside the handler *all* return `200`. Saftladen treats any 2xx as
+delivered and deletes the report, so a typo in the webhook id silently throws every report
+away. Before trusting it:
+
+```sh
+curl -i -X POST -H 'Content-Type: application/json' \
+  -d '{"karoo":{"batteryPercent":42},"sensors":[]}' \
+  http://homeassistant.local:8123/api/webhook/<your-webhook-id>
+```
+
+then confirm `sensor.karoo_battery` actually moved, and check the HA log for
+`Received message for unregistered webhook`. A 200 on its own proves nothing.
+
+Two things that will bite with `local_only: true` (the default): the Karoo has to reach HA
+over your LAN — a report relayed over Bluetooth through the companion app arrives from the
+phone's network, not yours — and HA counts Nabu Casa Cloud as local but not a bare reverse
+proxy. If reports stop arriving away from home, that is the first thing to check.
+
+[ha-webhook]: https://github.com/home-assistant/core/blob/dev/homeassistant/components/webhook/__init__.py
+
 ## Notes and limits
 
 Checked on a Karoo 2 (`k24`, Android 12): the Karoo System binds the extension service as
