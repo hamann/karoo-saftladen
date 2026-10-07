@@ -2,13 +2,19 @@ package io.github.hamann.saftladen.report
 
 import io.github.hamann.saftladen.karoo.connectAndAwait
 import io.github.hamann.saftladen.karoo.consumerFlow
+import io.github.hamann.saftladen.karoo.streamDataFlow
 import io.github.hamann.saftladen.settings.SettingsRepository
 import io.hammerhead.karooext.KarooSystemService
+import io.hammerhead.karooext.models.BatteryStatus
+import io.hammerhead.karooext.models.DataType
 import io.hammerhead.karooext.models.SavedDevices
+import io.hammerhead.karooext.models.StreamState
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.time.Instant
+import kotlin.math.roundToInt
 
 /**
  * Takes a snapshot of every saved sensor's battery status and buffers it for upload.
@@ -55,11 +61,7 @@ class BatteryReporter(
 
         val report = buildBatteryReport(
             savedDevices = savedDevices,
-            karoo = KarooDeviceInfo(
-                serial = karooSystem.serial,
-                hardwareType = karooSystem.hardwareType?.name,
-                extensionVersion = extensionVersion,
-            ),
+            karoo = karooSystem.deviceInfo(),
             trigger = trigger,
             createdAt = Instant.now(),
             includeSerialNumbers = settings.includeSerialNumbers,
@@ -90,7 +92,36 @@ class BatteryReporter(
         }
     }
 
+    /**
+     * Identity and charge of the head unit itself.
+     *
+     * The charge is streamed rather than read once, so a missing or slow stream degrades
+     * to a null battery instead of holding up the whole report.
+     */
+    private suspend fun KarooSystemService.deviceInfo(): KarooDeviceInfo {
+        val percent = withTimeoutOrNull(BATTERY_TIMEOUT_MS) {
+            streamDataFlow(DataType.Type.BATTERY_PERCENT)
+                .filterIsInstance<StreamState.Streaming>()
+                .first()
+                .dataPoint
+                .values[DataType.Field.BATTERY_PERCENT]
+        }?.roundToInt()
+
+        if (percent == null) {
+            Timber.w("Karoo did not report its own battery level")
+        }
+
+        return KarooDeviceInfo(
+            serial = serial,
+            hardwareType = hardwareType?.name,
+            extensionVersion = extensionVersion,
+            batteryPercent = percent,
+            battery = percent?.let { BatteryStatus.fromPercentage(it).name },
+        )
+    }
+
     private companion object {
         const val SNAPSHOT_TIMEOUT_MS = 10_000L
+        const val BATTERY_TIMEOUT_MS = 5_000L
     }
 }

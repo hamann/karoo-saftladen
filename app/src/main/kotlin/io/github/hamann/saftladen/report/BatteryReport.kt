@@ -49,6 +49,15 @@ data class KarooDeviceInfo(
     val hardwareType: String? = null,
     /** Version of this extension that produced the report. */
     val extensionVersion: String,
+    /**
+     * The head unit's own charge, 0-100, or null if Karoo did not report it.
+     */
+    val batteryPercent: Int? = null,
+    /**
+     * [batteryPercent] bucketed with the same vocabulary the sensors use, so that a
+     * consumer can treat the head unit like any other battery.
+     */
+    val battery: String? = null,
 )
 
 /** The JSON document that gets POSTed to the configured endpoint. */

@@ -4,6 +4,8 @@ import io.hammerhead.karooext.KarooSystemService
 import io.hammerhead.karooext.models.HttpResponseState
 import io.hammerhead.karooext.models.KarooEvent
 import io.hammerhead.karooext.models.OnHttpResponse
+import io.hammerhead.karooext.models.OnStreamState
+import io.hammerhead.karooext.models.StreamState
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -22,6 +24,18 @@ import java.util.concurrent.atomic.AtomicBoolean
 inline fun <reified T : KarooEvent> KarooSystemService.consumerFlow(): Flow<T> {
     return callbackFlow {
         val consumerId = addConsumer<T> { event: T -> trySend(event) }
+        awaitClose { removeConsumer(consumerId) }
+    }
+}
+
+/**
+ * Observe a streaming data type, unregistering the consumer when collection stops.
+ */
+fun KarooSystemService.streamDataFlow(dataTypeId: String): Flow<StreamState> {
+    return callbackFlow {
+        val consumerId = addConsumer(OnStreamState.StartStreaming(dataTypeId)) { event: OnStreamState ->
+            trySend(event.state)
+        }
         awaitClose { removeConsumer(consumerId) }
     }
 }

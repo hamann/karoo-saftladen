@@ -19,6 +19,8 @@ class BatteryReportTest {
         serial = "K1234",
         hardwareType = "KAROO",
         extensionVersion = "1.0.0",
+        batteryPercent = 43,
+        battery = "OK",
     )
 
     private fun detail(
@@ -136,7 +138,10 @@ class BatteryReportTest {
         assertEquals(REPORT_SCHEMA_VERSION, root["schemaVersion"]?.jsonPrimitive?.content?.toInt())
         assertEquals("RIDE_END", root["trigger"]?.jsonPrimitive?.content)
         assertEquals("2026-10-07T12:00:00Z", root["createdAt"]?.jsonPrimitive?.content)
-        assertEquals("K1234", root["karoo"]?.jsonObject?.get("serial")?.jsonPrimitive?.content)
+        val karooBlock = root["karoo"]?.jsonObject
+        assertEquals("K1234", karooBlock?.get("serial")?.jsonPrimitive?.content)
+        assertEquals(43, karooBlock?.get("batteryPercent")?.jsonPrimitive?.content?.toInt())
+        assertEquals("OK", karooBlock?.get("battery")?.jsonPrimitive?.content)
 
         val sensor = root["sensors"]?.jsonArray?.single()?.jsonObject
         assertEquals(false, sensor?.get("enabled")?.jsonPrimitive?.content?.toBoolean())

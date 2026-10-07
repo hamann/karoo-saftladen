@@ -51,7 +51,9 @@ RideState: Recording ──▶ Idle
   "karoo": {
     "serial": "K1234567",
     "hardwareType": "KAROO",
-    "extensionVersion": "1.0.0"
+    "extensionVersion": "1.0.0",
+    "batteryPercent": 43,
+    "battery": "OK"
   },
   "sensors": [
     {
@@ -83,8 +85,13 @@ RideState: Recording ──▶ Idle
 ```
 
 * `battery` is Karoo's coarse status — `NEW`, `GOOD`, `OK`, `LOW`, `CRITICAL`, `INVALID` —
-  or `null` if the sensor never reported a level. Karoo's SDK does not expose a percentage;
-  for reference it buckets `>95 NEW, >80 GOOD, >45 OK, >15 LOW, >0 CRITICAL`.
+  or `null` if the sensor never reported a level. The SDK exposes no percentage *for
+  sensors*; it buckets `>95 NEW, >80 GOOD, >45 OK, >15 LOW, >0 CRITICAL`.
+* The head unit itself is reported under `karoo`, where a real percentage *is* available
+  (`DataType.Type.BATTERY_PERCENT`). `battery` there is that percentage bucketed with the
+  same vocabulary, so the Karoo can be treated like any other battery. Both are `null` if
+  the level did not arrive within 5 s — a missing head-unit reading never blocks the
+  sensor report.
 * Multi-part sensors (e.g. an electronic groupset) produce one entry per `component` plus
   one for the device itself; entries of the same device share `id`.
 * `trigger` is `RIDE_END`, `MANUAL` (test button), or `BONUS_ACTION`.
