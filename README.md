@@ -162,13 +162,18 @@ trigger a report mid-ride.
 Checked on a Karoo 2 (`k24`, Android 12): the Karoo System binds the extension service as
 soon as the APK is installed, `RideState` arrives on subscribe, and a report with six
 sensors (ANT+, BLE and an extension-provided Di2) was delivered over wifi and, with the
-endpoint down, buffered and retried.
-
+endpoint down, buffered and retried. A live ride confirmed the end-of-ride path: Karoo
+goes `Recording` → `Paused(auto=true)` → `Paused(auto=false)` → `Idle` when a stationary
+ride is ended, which is why any `Paused` counts as "was riding".
 
 * The Karoo System binds extension services while they are installed and enabled; that is
   what keeps the ride-state subscription alive. The extension does not run a foreground
   service of its own.
-* A ride that is discarded rather than saved also ends in `RideState.Idle` and therefore
-  also produces a report.
+* **Discarded rides report too, on purpose.** Karoo reports plain `RideState.Idle` for
+  both a saved and a discarded ride, so the two are indistinguishable here — and that is
+  fine: a battery reading taken at the end of an abandoned ride is still a true reading.
+  Reports carry a `reportId`, so a consumer that considers this a duplicate can drop it.
+  Suppressing it would mean declaring `fitFile="true"` and hooking `startFit` to learn
+  whether an activity was actually committed; don't take that on without a reason.
 * `applicationId` is `io.github.hamann.saftladen`; rename it (and the `MAIN` action in
   `AndroidManifest.xml`) if you publish under a different account.
