@@ -163,8 +163,8 @@ A webhook is the right fit: the webhook id *is* the credential, so Saftladen's a
 fields stay empty. (The REST API at `/api/states/…` is not usable here — it expects a
 `{"state": …, "attributes": …}` body, and Saftladen posts its own shape.)
 
-Pick a long random id, put it in `secrets.yaml` as `karoo_webhook_id`, and add
-trigger-based template sensors:
+Pick a long random id, put it in `secrets.yaml` as `karoo_webhook_id`, and add one
+trigger-based template sensor per device:
 
 ```yaml
 # configuration.yaml
@@ -175,7 +175,7 @@ template:
         allowed_methods: [POST]
         local_only: true
     sensor:
-      # The head unit, the one reading that is a real percentage.
+      # The head unit — the one reading that is a real percentage.
       - name: Karoo battery
         unique_id: karoo_battery
         state: "{{ trigger.json.karoo.batteryPercent }}"
@@ -190,15 +190,45 @@ template:
           report_trigger: "{{ trigger.json.trigger }}"
           sensors: "{{ trigger.json.sensors }}"
 
-      # One sensor by name. No device_class: the state is a word, not a number.
+      # One entity per sensor, matched on the name Karoo shows in its sensor list.
+      # No device_class — the state is a word (GOOD/OK/LOW/…), not a number.
+      - name: Heart rate battery
+        unique_id: karoo_hr_battery
+        state: >
+          {{ trigger.json.sensors | selectattr('name', 'eq', 'Herzfrequenz 503512')
+             | map(attribute='battery') | first | default('unknown', true) }}
+
       - name: Di2 battery
         unique_id: karoo_di2_battery
         state: >
-          {{ trigger.json.sensors
-             | selectattr('name', 'eq', 'Di2 1249')
+          {{ trigger.json.sensors | selectattr('name', 'eq', 'Di2 1249')
              | map(attribute='battery') | first | default('unknown', true) }}
 
-      # Whatever needs charging, so one automation can cover every sensor.
+      - name: Power meter battery
+        unique_id: karoo_power_battery
+        state: >
+          {{ trigger.json.sensors | selectattr('name', 'eq', 'ASSIOMA31241L')
+             | map(attribute='battery') | first | default('unknown', true) }}
+
+      - name: Radar battery
+        unique_id: karoo_radar_battery
+        state: >
+          {{ trigger.json.sensors | selectattr('name', 'eq', 'Radar 20031')
+             | map(attribute='battery') | first | default('unknown', true) }}
+
+      - name: Rear light battery
+        unique_id: karoo_light_battery
+        state: >
+          {{ trigger.json.sensors | selectattr('name', 'eq', 'Leicht 20031')
+             | map(attribute='battery') | first | default('unknown', true) }}
+
+      - name: Speed sensor battery
+        unique_id: karoo_speed_battery
+        state: >
+          {{ trigger.json.sensors | selectattr('name', 'eq', 'Geschwindigkeit 24769')
+             | map(attribute='battery') | first | default('unknown', true) }}
+
+      # Anything that needs charging, so one automation covers the whole bike.
       - name: Bike batteries needing attention
         unique_id: karoo_batteries_low
         state: >
@@ -210,6 +240,11 @@ template:
 In the Saftladen app set the URL to
 `http://homeassistant.local:8123/api/webhook/<your-webhook-id>` and leave both auth header
 fields blank. Reload templates (or restart HA) before testing.
+
+To add a sensor, copy a block and change the name — take it verbatim from a delivered
+report (`"name"`), not from memory. A name that matches nothing yields `unknown` rather
+than an error, so if an entity is stuck at `unknown`, that is the first thing to check.
+Renaming a sensor on the Karoo changes the name here too.
 
 **Home Assistant answers `200 OK` even when it did nothing with your report.** Checked
 against [`webhook/__init__.py`][ha-webhook]: an unregistered id, a `local_only` rejection,
