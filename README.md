@@ -237,6 +237,30 @@ template:
              | map(attribute='name') | list | join(', ') | default('none', true) }}
 ```
 
+**If you already have a `template:` key, add the whole thing as a new list item** — do not
+merge it into an existing one. Two rules decide the shape, and breaking either fails
+quietly:
+
+* `triggers:` and `sensor:` must be **sibling keys of the same list item**. A `- triggers:`
+  item with no entity domain is an orphan; HA logs *"Incomplete template configuration"*
+  and the entities never appear. (A warning today, a hard error from Core 2026.5.)
+* Everything in a block with `triggers:` updates **only** when that trigger fires. Moving
+  an existing state-based sensor under the webhook would freeze it between rides — so keep
+  state-based entities in their own item, without a trigger.
+
+```yaml
+template:
+  - sensor:                  # existing, state-based — leave it alone
+    - name: Something else
+      state: "{{ states('sensor.x') }}"
+
+  - triggers:                # new item: trigger and entities together
+    - trigger: webhook
+      webhook_id: !secret karoo_webhook_id
+    sensor:                  # sibling of `triggers`, not nested inside it
+    - name: Karoo battery
+```
+
 In the Saftladen app set the URL to
 `http://homeassistant.local:8123/api/webhook/<your-webhook-id>` and leave both auth header
 fields blank. Reload templates (or restart HA) before testing.
