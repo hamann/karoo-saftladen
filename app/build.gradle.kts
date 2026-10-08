@@ -25,7 +25,9 @@ android {
         // Karoo 2 runs Android 8.1 (API 27); 26 is the floor for java.time without desugaring.
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
+        // A Karoo decides an update exists by comparing versionCode, so raise it
+        // with every release or an installed extension never sees the new one.
+        versionCode = 2
         versionName = "1.0.0"
     }
 
