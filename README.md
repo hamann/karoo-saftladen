@@ -191,46 +191,99 @@ template:
           sensors: "{{ trigger.json.sensors }}"
 
       # One entity per sensor, matched on the name Karoo shows in its sensor list.
-      # No device_class — the state is a word (GOOD/OK/LOW/…), not a number.
+      # Karoo reports a bucket, not a percentage, so the bucket is mapped to the bottom
+      # of its range: that makes `device_class: battery` work (proper battery icon, %,
+      # battery cards) without ever overstating the charge. The real word is kept in
+      # the `status` attribute. Anything unmapped — INVALID, a battery that was never
+      # reported, a name that matches nothing — renders as `unknown`.
       - name: Heart rate battery
         unique_id: karoo_hr_battery
+        unit_of_measurement: "%"
+        device_class: battery
+        state_class: measurement
         state: >
-          {{ trigger.json.sensors | selectattr('name', 'eq', 'Herzfrequenz 503512')
-             | map(attribute='battery') | first | default('unknown', true) }}
+          {% set s = trigger.json.sensors | selectattr('name', 'eq', 'Herzfrequenz 503512')
+             | map(attribute='battery') | first | default('', true) %}
+          {{- {'NEW': 96, 'GOOD': 81, 'OK': 46, 'LOW': 16, 'CRITICAL': 1}.get(s, 'unknown') }}
+        attributes:
+          status: >
+            {{ trigger.json.sensors | selectattr('name', 'eq', 'Herzfrequenz 503512')
+               | map(attribute='battery') | first | default('unknown', true) }}
 
       - name: Di2 battery
         unique_id: karoo_di2_battery
+        unit_of_measurement: "%"
+        device_class: battery
+        state_class: measurement
         state: >
-          {{ trigger.json.sensors | selectattr('name', 'eq', 'Di2 1249')
-             | map(attribute='battery') | first | default('unknown', true) }}
+          {% set s = trigger.json.sensors | selectattr('name', 'eq', 'Di2 1249')
+             | map(attribute='battery') | first | default('', true) %}
+          {{- {'NEW': 96, 'GOOD': 81, 'OK': 46, 'LOW': 16, 'CRITICAL': 1}.get(s, 'unknown') }}
+        attributes:
+          status: >
+            {{ trigger.json.sensors | selectattr('name', 'eq', 'Di2 1249')
+               | map(attribute='battery') | first | default('unknown', true) }}
 
       - name: Power meter battery
         unique_id: karoo_power_battery
+        unit_of_measurement: "%"
+        device_class: battery
+        state_class: measurement
         state: >
-          {{ trigger.json.sensors | selectattr('name', 'eq', 'ASSIOMA31241L')
-             | map(attribute='battery') | first | default('unknown', true) }}
+          {% set s = trigger.json.sensors | selectattr('name', 'eq', 'ASSIOMA31241L')
+             | map(attribute='battery') | first | default('', true) %}
+          {{- {'NEW': 96, 'GOOD': 81, 'OK': 46, 'LOW': 16, 'CRITICAL': 1}.get(s, 'unknown') }}
+        attributes:
+          status: >
+            {{ trigger.json.sensors | selectattr('name', 'eq', 'ASSIOMA31241L')
+               | map(attribute='battery') | first | default('unknown', true) }}
 
       - name: Radar battery
         unique_id: karoo_radar_battery
+        unit_of_measurement: "%"
+        device_class: battery
+        state_class: measurement
         state: >
-          {{ trigger.json.sensors | selectattr('name', 'eq', 'Radar 20031')
-             | map(attribute='battery') | first | default('unknown', true) }}
+          {% set s = trigger.json.sensors | selectattr('name', 'eq', 'Radar 20031')
+             | map(attribute='battery') | first | default('', true) %}
+          {{- {'NEW': 96, 'GOOD': 81, 'OK': 46, 'LOW': 16, 'CRITICAL': 1}.get(s, 'unknown') }}
+        attributes:
+          status: >
+            {{ trigger.json.sensors | selectattr('name', 'eq', 'Radar 20031')
+               | map(attribute='battery') | first | default('unknown', true) }}
 
       - name: Rear light battery
         unique_id: karoo_light_battery
+        unit_of_measurement: "%"
+        device_class: battery
+        state_class: measurement
         state: >
-          {{ trigger.json.sensors | selectattr('name', 'eq', 'Leicht 20031')
-             | map(attribute='battery') | first | default('unknown', true) }}
+          {% set s = trigger.json.sensors | selectattr('name', 'eq', 'Leicht 20031')
+             | map(attribute='battery') | first | default('', true) %}
+          {{- {'NEW': 96, 'GOOD': 81, 'OK': 46, 'LOW': 16, 'CRITICAL': 1}.get(s, 'unknown') }}
+        attributes:
+          status: >
+            {{ trigger.json.sensors | selectattr('name', 'eq', 'Leicht 20031')
+               | map(attribute='battery') | first | default('unknown', true) }}
 
       - name: Speed sensor battery
         unique_id: karoo_speed_battery
+        unit_of_measurement: "%"
+        device_class: battery
+        state_class: measurement
         state: >
-          {{ trigger.json.sensors | selectattr('name', 'eq', 'Geschwindigkeit 24769')
-             | map(attribute='battery') | first | default('unknown', true) }}
+          {% set s = trigger.json.sensors | selectattr('name', 'eq', 'Geschwindigkeit 24769')
+             | map(attribute='battery') | first | default('', true) %}
+          {{- {'NEW': 96, 'GOOD': 81, 'OK': 46, 'LOW': 16, 'CRITICAL': 1}.get(s, 'unknown') }}
+        attributes:
+          status: >
+            {{ trigger.json.sensors | selectattr('name', 'eq', 'Geschwindigkeit 24769')
+               | map(attribute='battery') | first | default('unknown', true) }}
 
       # Anything that needs charging, so one automation covers the whole bike.
       - name: Bike batteries needing attention
         unique_id: karoo_batteries_low
+        icon: mdi:battery-alert-variant-outline
         state: >
           {{ trigger.json.sensors
              | selectattr('battery', 'in', ['LOW', 'CRITICAL'])
