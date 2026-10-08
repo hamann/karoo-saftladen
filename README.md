@@ -173,7 +173,7 @@ template:
       - trigger: webhook
         webhook_id: !secret karoo_webhook_id
         allowed_methods: [POST]
-        local_only: true
+        local_only: false
     sensor:
       # The head unit — the one reading that is a real percentage.
       - name: Karoo battery
@@ -247,10 +247,9 @@ than an error, so if an entity is stuck at `unknown`, that is the first thing to
 Renaming a sensor on the Karoo changes the name here too.
 
 **Home Assistant answers `200 OK` even when it did nothing with your report.** Checked
-against [`webhook/__init__.py`][ha-webhook]: an unregistered id, a `local_only` rejection,
-and an exception inside the handler *all* return `200`. Saftladen treats any 2xx as
-delivered and deletes the report, so a typo in the webhook id silently throws every report
-away. Before trusting it:
+against [`webhook/__init__.py`][ha-webhook]: an unregistered id and an exception inside the
+handler both return `200`. Saftladen treats any 2xx as delivered and deletes the report,
+so a typo in the webhook id silently throws every report away. Before trusting it:
 
 ```sh
 curl -i -X POST -H 'Content-Type: application/json' \
@@ -260,11 +259,6 @@ curl -i -X POST -H 'Content-Type: application/json' \
 
 then confirm `sensor.karoo_battery` actually moved, and check the HA log for
 `Received message for unregistered webhook`. A 200 on its own proves nothing.
-
-Two things that will bite with `local_only: true` (the default): the Karoo has to reach HA
-over your LAN — a report relayed over Bluetooth through the companion app arrives from the
-phone's network, not yours — and HA counts Nabu Casa Cloud as local but not a bare reverse
-proxy. If reports stop arriving away from home, that is the first thing to check.
 
 [ha-webhook]: https://github.com/home-assistant/core/blob/dev/homeassistant/components/webhook/__init__.py
 
