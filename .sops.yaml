@@ -3,8 +3,9 @@
 # personal key. Revoking it is a matter of dropping it from here and
 # re-encrypting.
 #
-# The same CI key is shared with the other Karoo extension repo, so one secret
-# covers both. Rotating it means re-encrypting secrets.yaml in each.
+# This key is dedicated to this repository, so a leaked secret here cannot sign
+# anything else. Rotating it: replace the key below, re-encrypt secrets.yaml
+# with `sops updatekeys secrets.yaml`, and update the SOPS_AGE_KEY secret.
 keys:
   - &user_hamann age19ftxf5pwxqxjw74mmnyacxtvmgetc3rvnqv0zwy2w6thdnhj3vaqqxyvwz
   - &github_actions age1u5yqwjjjq9mn8e7808370vvn6t3wu57zrwugh38gksuvywyq6ggspg9aeg
