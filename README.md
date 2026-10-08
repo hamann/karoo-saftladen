@@ -145,6 +145,51 @@ even for public packages. Either:
 
 Keep the version in `gradle/libs.versions.toml` in sync with whichever tag you publish.
 
+## Releasing
+
+Tagging cuts a release:
+
+```sh
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+`.github/workflows/release.yml` runs the tests, builds a signed APK and writes
+`manifest.json` from the APK's own version data — so the manifest and the APK can never
+disagree about what a release is. Both are attached to the GitHub release, which is where
+the `MANIFEST_URL` meta-data in `AndroidManifest.xml` points, so a Karoo with the
+extension installed sees the update.
+
+Bump `versionCode` and `versionName` in `app/build.gradle.kts` before tagging. A Karoo
+decides an update exists by comparing `versionCode`, so a release that forgets to raise it
+is invisible to anyone who already has the extension.
+
+### Signing
+
+The signing key lives encrypted in `secrets.yaml`, committed. Losing it means no existing
+install can ever be updated — Android refuses an APK signed with a different key — which
+is exactly why it is in the repository rather than on one machine.
+
+One-time setup:
+
+```sh
+nix develop --command tools/init-signing.sh   # creates the keystore, seals it into secrets.yaml
+```
+
+Then add the age private key matching `github_actions` in `.sops.yaml` as the repository
+secret `SOPS_AGE_KEY`. CI uses that one secret to decrypt everything else.
+
+To build a signed release locally:
+
+```sh
+source tools/load-signing.sh
+gradle assembleRelease
+tools/package-release.sh
+```
+
+Without the keystore the release build is simply left unsigned, so a clone without the key
+still builds. `tools/package-release.sh` refuses to package an unsigned APK rather than
+publish a release that fails to install for everyone who downloads it.
+
 ## Trying it without a ride
 
 Run the throwaway receiver on your machine and point the extension at it:

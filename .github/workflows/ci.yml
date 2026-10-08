@@ -1,0 +1,37 @@
+name: ci
+
+# The tests compile against karoo-ext, which lives in GitHub Packages and
+# refuses anonymous reads even though it is public. GITHUB_TOKEN with
+# `packages: read` is enough; no PAT is needed.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+
+      # The toolchain comes from flake.nix, same as locally. There is no Gradle
+      # wrapper in this repo on purpose, so CI and a developer machine cannot
+      # end up on different versions of anything.
+      - name: Unit tests
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: nix develop --command gradle test
+
+      - name: Assemble the debug APK
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: nix develop --command gradle assembleDebug

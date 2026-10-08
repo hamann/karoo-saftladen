@@ -49,6 +49,10 @@
               gradle
               androidSdk
               pkgs.android-tools # adb, for `adb install` onto the Karoo
+              # Release signing material lives encrypted in secrets.yaml; CI
+              # decrypts it with a dedicated age key.
+              pkgs.sops
+              pkgs.age
             ];
 
             JAVA_HOME = jdk.home;

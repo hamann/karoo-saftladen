@@ -7,6 +7,13 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Release signing. The keystore never lives in the repo: point at it with
+// SAFTLADEN_KEYSTORE and friends, either exported locally or injected by CI.
+// When they are absent the release build is simply left unsigned, so a clone
+// without the key still builds.
+val keystorePath: String? = System.getenv("SAFTLADEN_KEYSTORE")
+    ?: providers.gradleProperty("saftladen.keystore").orNull
+
 android {
     namespace = "io.github.hamann.saftladen"
     compileSdk = 35
@@ -22,10 +29,28 @@ android {
         versionName = "1.0.0"
     }
 
+    signingConfigs {
+        if (keystorePath != null) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("SAFTLADEN_KEYSTORE_PASSWORD")
+                    ?: providers.gradleProperty("saftladen.keystore.password").orNull
+                keyAlias = System.getenv("SAFTLADEN_KEY_ALIAS")
+                    ?: providers.gradleProperty("saftladen.key.alias").orNull
+                    ?: "saftladen"
+                keyPassword = System.getenv("SAFTLADEN_KEY_PASSWORD")
+                    ?: providers.gradleProperty("saftladen.key.password").orNull
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // Karoo extensions are side-loaded, so the debug key is good enough to start with.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release")
+            // Off until a release build has been exercised on-device: karoo-ext
+            // serialises its models with kotlinx.serialization, whose serializers R8
+            // cannot see. proguard-rules.pro keeps them, but that is untested, and
+            // the debug build you sideload never minifies.
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

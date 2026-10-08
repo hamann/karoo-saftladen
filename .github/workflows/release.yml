@@ -1,0 +1,60 @@
+name: release
+
+# Tag a version to cut a release:
+#   git tag v1.0.0 && git push origin v1.0.0
+#
+# Produces a signed APK and the manifest.json the Karoo reads to offer updates.
+# Both are attached to the release, which is what MANIFEST_URL points at.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  # karoo-ext lives in GitHub Packages, which demands authentication even for
+  # public packages. This lets GITHUB_TOKEN fetch it, so no PAT is needed here.
+  packages: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Unit tests
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: nix develop --command gradle test
+
+      # One repository secret, not four: the dedicated age key from .sops.yaml.
+      # secrets.yaml in the repo stays the single source of truth, so rotating
+      # the signing key is a re-encrypt and a commit.
+      - name: Decrypt the signing material
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: nix develop --command tools/load-signing.sh
+
+      - name: Build the release APK
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: nix develop --command gradle assembleRelease
+
+      - name: Collect release artefacts
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: nix develop --command tools/package-release.sh
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            saftladen.apk
+            manifest.json
+          generate_release_notes: true

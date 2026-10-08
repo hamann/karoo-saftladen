@@ -42,6 +42,13 @@
                 android:resource="@xml/extension_info" />
         </service>
 
+        <!-- Where the Karoo System looks to find out that an update exists.
+             The release workflow writes this manifest.json and attaches it to
+             the GitHub release. -->
+        <meta-data
+            android:name="io.hammerhead.karooext.MANIFEST_URL"
+            android:value="https://github.com/hamann/karoo-saftladen/releases/latest/download/manifest.json" />
+
     </application>
 
 </manifest>
