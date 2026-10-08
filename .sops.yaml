@@ -7,7 +7,7 @@
 # covers both. Rotating it means re-encrypting secrets.yaml in each.
 keys:
   - &user_hamann age19ftxf5pwxqxjw74mmnyacxtvmgetc3rvnqv0zwy2w6thdnhj3vaqqxyvwz
-  - &github_actions age1la2ue4gmx0x80f5d27chsvmqkkl8fv25xw98dcv9j90yku249ujqp4aha8
+  - &github_actions age1u5yqwjjjq9mn8e7808370vvn6t3wu57zrwugh38gksuvywyq6ggspg9aeg
 
 creation_rules:
   - path_regex: secrets.yaml$
