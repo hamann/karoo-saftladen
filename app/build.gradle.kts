@@ -22,7 +22,8 @@ android {
 
     defaultConfig {
         applicationId = "io.github.hamann.saftladen"
-        // Karoo 2 runs Android 8.1 (API 27); 26 is the floor for java.time without desugaring.
+        // 26 is the floor for java.time without desugaring, and keeps a Karoo 2
+        // (Android 8.1, API 27) in range alongside the Karoo 3 this is built on.
         minSdk = 26
         targetSdk = 34
         // A Karoo decides an update exists by comparing versionCode, so raise it

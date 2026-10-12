@@ -16,9 +16,6 @@ ride ends  ──▶  Heart rate     OK
 No connection at the finish? The report waits on the device and is sent later, so a ride
 that ends out of range is not a ride you lose.
 
-*A Saftladen is German for a shambolic outfit, literally a "juice shop" — which is also
-exactly what this reports on.*
-
 ---
 
 ## Install
@@ -68,8 +65,7 @@ look — it will usually name the problem outright.
 
 ## Status
 
-Working, and used on a real Karoo 2 (`k24`, Android 12) against real sensors. Version
-0.1.0.
+Working, and used on a real Karoo 3 (Android 12) against real sensors. Version 0.1.0.
 
 What has been tested on the device:
 
@@ -84,7 +80,8 @@ What has been tested on the device:
 
 What has not:
 
-- **A Karoo 3.** Nothing here is Karoo 2 specific, but it has not been run on one.
+- **A Karoo 2.** Nothing here is Karoo 3 specific, and `minSdk` leaves it in range, but it
+  has not been run on one.
 - **Driving a report from a controller button.** The *Send battery report* bonus action is
   published and handled, and the Karoo is meant to be able to bind it to a controller.
   Whether extension actions appear in that list is unconfirmed — there was no suitable
