@@ -1,406 +1,135 @@
 # Saftladen
 
-A Hammerhead Karoo extension that collects the battery status of every paired sensor when
-a ride ends and POSTs it as JSON to a URL you configure. If the Karoo has no connection at
-that moment, the report is buffered on disk and retried until the endpoint accepts it.
-
-## How it works
+When a ride ends, send the battery status of **every sensor on the bike** — and of the
+**Karoo itself** — to somewhere you will actually look at it.
 
 ```
-RideState: Recording ──▶ Idle
-                          │
-                          ▼
-            SavedDevices snapshot (battery per sensor)
-                          │
-                          ▼
-              ReportStore  (one JSON file per report, filesDir/reports)
-                          │
-                          ▼
-   ReportFlushWorker ──▶ ReportUploader ──▶ POST via Karoo's network
-        (retry/backoff)                     (OnHttpResponse)
+ride ends  ──▶  Heart rate     OK
+                Di2            OK
+                Power meter    GOOD
+                Radar          OK
+                Rear light     OK
+                Karoo          54%
+                                      ──▶  POST to your URL, as JSON
 ```
 
-* **Capture** – [`SaftladenExtension`](app/src/main/kotlin/io/github/hamann/saftladen/extension/SaftladenExtension.kt)
-  subscribes to `RideState` and fires on the recording-to-idle transition. The battery
-  levels come from Karoo's own saved device list (`SavedDevices`), which holds the last
-  reading per sensor, so sensors that dropped out mid-ride are still reported. The
-  extension also keeps the list it saw during the ride and falls back to it if Karoo does
-  not answer within 10 s of recording stopping.
-* **Buffer** – [`ReportStore`](app/src/main/kotlin/io/github/hamann/saftladen/report/ReportStore.kt)
-  writes one file per report (write-to-temp-then-rename), oldest-first ordering, capped at
-  200 reports and 30 days.
-* **Deliver** – [`ReportUploader`](app/src/main/kotlin/io/github/hamann/saftladen/report/ReportUploader.kt)
-  POSTs through `OnHttpResponse`, i.e. the Karoo System's own connection (wifi, or
-  Bluetooth to the companion app). The app itself has no `INTERNET` permission.
-  2xx deletes the report, 4xx (other than 408/429) drops it as unacceptable, anything else
-  keeps it buffered.
-* **Retry** – [`ReportFlushWorker`](app/src/main/kotlin/io/github/hamann/saftladen/report/ReportFlushWorker.kt)
-  retries with exponential backoff, plus an hourly safety net so a buffer that survived a
-  reboot still drains. It deliberately sets *no* `NetworkType.CONNECTED` constraint:
-  Karoo's Bluetooth-to-phone path is not visible to Android's connectivity manager, so
-  such a constraint would park the worker exactly when delivery is possible.
+No connection at the finish? The report waits on the device and is sent later, so a ride
+that ends out of range is not a ride you lose.
 
-## Payload
+*A Saftladen is German for a shambolic outfit, literally a "juice shop" — which is also
+exactly what this reports on.*
 
-```json
-{
-  "reportId": "0a0f3f0a-6f9a-4b51-8a7a-a7a5b3c7d0e1",
-  "schemaVersion": 1,
-  "trigger": "RIDE_END",
-  "createdAt": "2026-10-07T15:42:11Z",
-  "karoo": {
-    "serial": "K1234567",
-    "hardwareType": "KAROO",
-    "extensionVersion": "1.0.0",
-    "batteryPercent": 43,
-    "battery": "OK"
-  },
-  "sensors": [
-    {
-      "id": "ANT_PLUS-12345",
-      "name": "Quarq DZero",
-      "connectionType": "ANT_PLUS",
-      "enabled": true,
-      "component": null,
-      "battery": "GOOD",
-      "batteryUpdatedAt": "2026-10-07T15:41:58Z",
-      "manufacturer": "SRAM",
-      "serialNumber": "1234567",
-      "supportedDataTypes": ["POWER", "CADENCE"]
-    },
-    {
-      "id": "BLE-axs-group",
-      "name": "AXS",
-      "connectionType": "BLE",
-      "enabled": true,
-      "component": "rear_derailleur",
-      "battery": "LOW",
-      "batteryUpdatedAt": "2026-10-07T15:40:02Z",
-      "manufacturer": "SRAM",
-      "serialNumber": "7654321",
-      "supportedDataTypes": []
-    }
-  ]
-}
-```
+---
 
-* `battery` is Karoo's coarse status — `NEW`, `GOOD`, `OK`, `LOW`, `CRITICAL`, `INVALID` —
-  or `null` if the sensor never reported a level. The SDK exposes no percentage *for
-  sensors*; it buckets `>95 NEW, >80 GOOD, >45 OK, >15 LOW, >0 CRITICAL`.
-* The head unit itself is reported under `karoo`, where a real percentage *is* available
-  (`DataType.Type.BATTERY_PERCENT`). `battery` there is that percentage bucketed with the
-  same vocabulary, so the Karoo can be treated like any other battery. Both are `null` if
-  the level did not arrive within 5 s — a missing head-unit reading never blocks the
-  sensor report.
-* Multi-part sensors (e.g. an electronic groupset) produce one entry per `component` plus
-  one for the device itself; entries of the same device share `id`.
-* `trigger` is `RIDE_END`, `MANUAL` (test button), or `BONUS_ACTION`.
-* `serialNumber` is omitted when "Include sensor serial numbers" is switched off.
-* Content type is `application/json`; one optional extra header (name + value) can be
-  configured, e.g. `Authorization: Bearer …`.
-* Reports must stay below 100 KB — that is Karoo's limit for extension HTTP requests.
-  With ~15 fields per sensor that is thousands of sensors, so it is not a practical limit.
+## Install
 
-Reply `2xx` to acknowledge. Reply `4xx` only if the report is unacceptable and should be
-dropped; use `5xx`, `408` or `429` to have it retried later.
+On a **Karoo**, using the Hammerhead Companion app — this is Hammerhead's
+[sideloading procedure](https://support.hammerhead.io/hc/en-us/articles/31576497036827-Companion-App-Sideloading),
+and no cable is involved:
 
-## Development
+1. On your **phone**, open the
+   [latest release](https://github.com/hamann/karoo-saftladen/releases/latest).
+2. Long-press the link to `saftladen.apk` and **share it with the Hammerhead Companion
+   app**.
+3. Your Karoo shows an install prompt. Press **Install**.
+4. Open **Saftladen** from the main menu, enter the URL reports should go to, and press
+   **Save settings**.
+5. Press **Send test report now**. If it says it sent, you are done — every ride from now
+   on reports by itself.
 
-Everything is provided by the Nix flake:
+No permissions to grant, and nothing to add to a data page: it does its work in the
+background and has no field of its own.
 
-```sh
-nix develop            # or: direnv allow
-gradle test            # unit tests for report building and the buffer
-gradle assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb logcat -s Saftladen:V KarooSystem:V KarooExtension:V
-```
+### Updating
 
-The flake pins JDK 17, Gradle, and an Android SDK (platform 35, build-tools 35.0.1) via
-`androidenv`, so no Android Studio install is needed. If you use Android Studio, point its
-JDK and SDK at the ones from `nix develop` (`echo $JAVA_HOME $ANDROID_HOME`).
+Long-tap the Saftladen icon on the main menu and choose **Update**. The app points at its
+own latest release, so it finds new versions without being told where to look.
 
-### karoo-ext dependency
+### If no report arrives
 
-`io.hammerhead:karoo-ext` is published to GitHub Packages, which requires authentication
-even for public packages. Either:
+The buffer count and the last attempt are shown in the app, which is the first place to
+look — it will usually name the problem outright.
 
-1. Put a token with `read:packages` in `~/.gradle/gradle.properties`:
+- **"no endpoint configured"** — the URL is blank, or you changed it without pressing
+  **Save settings**.
+- **"Upload failed"** with a connection error, and the buffer climbing. The Karoo could
+  not reach your endpoint. Reports keep accumulating and go out when it can, so this
+  fixes itself once the endpoint is reachable; **Retry buffered reports** forces an
+  attempt now.
+- **It says sent, but nothing arrived.** Your endpoint answered `2xx` without storing
+  anything. Home Assistant does this for a mistyped webhook id — see
+  [docs/home-assistant.md](docs/home-assistant.md), which covers how to tell.
+- **Reports only after you get home.** Expected if the Karoo only has wifi. Over Bluetooth
+  it goes through the companion app, which has to be running on your phone.
+- **Nothing at all, ever, including the test button.** Check the extension is enabled in
+  the Karoo's extension list.
 
-   ```properties
-   gpr.user=your-github-user
-   gpr.key=ghp_...
-   ```
+---
 
-   (or export `GITHUB_ACTOR` / `GITHUB_TOKEN`), or
+## Status
 
-2. Publish it locally once — `settings.gradle.kts` prefers `mavenLocal` for the
-   `io.hammerhead` group:
+Working, and used on a real Karoo 2 (`k24`, Android 12) against real sensors. Version
+0.1.0.
 
-   ```sh
-   git clone https://github.com/hammerheadnav/karoo-ext
-   cd karoo-ext && git checkout 1.1.9
-   ./gradlew :lib:publishToMavenLocal
-   ```
+What has been tested on the device:
 
-Keep the version in `gradle/libs.versions.toml` in sync with whichever tag you publish.
+- The Karoo binding the extension as soon as the APK is installed, with no reboot
+- A live ride: `Recording` → auto-pause → manual pause → `Idle`, and a report on the end
+- Six real sensors in one report — ANT+, BLE, and a Di2 provided by another extension —
+  plus the head unit's own charge
+- Delivery over wifi through the Karoo's own connection
+- The endpoint being down at ride end: buffered, retried, and delivered a minute later
+  with the ride's own timestamp intact
+- Signed releases built from a tag, and the manifest the Karoo reads for updates
 
-## Releasing
+What has not:
 
-Tagging cuts a release:
+- **A Karoo 3.** Nothing here is Karoo 2 specific, but it has not been run on one.
+- **Driving a report from a controller button.** The *Send battery report* bonus action is
+  published and handled, and the Karoo is meant to be able to bind it to a controller.
+  Whether extension actions appear in that list is unconfirmed — there was no suitable
+  controller here to find out.
+- **Minified release builds.** Minification is off; see
+  [docs/development.md](docs/development.md).
 
-```sh
-git tag v1.0.0 && git push origin v1.0.0
-```
+## What it does not do
 
-`.github/workflows/release.yml` runs the tests, builds a signed APK and writes
-`manifest.json` from the APK's own version data — so the manifest and the APK can never
-disagree about what a release is. Both are attached to the GitHub release, which is where
-the `MANIFEST_URL` meta-data in `AndroidManifest.xml` points, so a Karoo with the
-extension installed sees the update.
+**Only at the end of a ride.** Not continuously, not on a schedule, and there is no data
+field showing a battery mid-ride. If you want a reading now, the app has a test button.
 
-Bump `versionCode` and `versionName` in `app/build.gradle.kts` before tagging. A Karoo
-decides an update exists by comparing `versionCode`, so a release that forgets to raise it
-is invisible to anyone who already has the extension.
+**Percentages, for sensors.** The Karoo exposes only a coarse status for them —
+`NEW`, `GOOD`, `OK`, `LOW`, `CRITICAL` — and no finer number exists to pass on. The head
+unit is the exception: that one is a real percentage.
 
-### Signing
+**Tell a saved ride from a discarded one.** The Karoo reports both the same way, so a ride
+you abandon still produces a report. That is deliberate — the battery reading is true
+either way — and each report carries a `reportId` so a consumer can drop what it considers
+a duplicate.
 
-The signing key lives encrypted in `secrets.yaml`, committed. Losing it means no existing
-install can ever be updated — Android refuses an APK signed with a different key — which
-is exactly why it is in the repository rather than on one machine.
+**Fetch a battery on demand.** Every level comes from what the Karoo last heard from that
+sensor, which can be hours or days old. Each one is timestamped so you can see how stale
+it is.
 
-One-time setup:
+---
 
-```sh
-nix develop --command tools/init-signing.sh   # creates the keystore, seals it into secrets.yaml
-```
+## Sending the reports somewhere
 
-Then add the age private key matching `github_actions` in `.sops.yaml` as the repository
-secret `SOPS_AGE_KEY`. CI uses that one secret to decrypt everything else.
+The JSON, and what an endpoint should reply, is in
+[docs/report-format.md](docs/report-format.md) — enough to write a receiver against,
+without reading any of this code.
 
-To build a signed release locally:
+For Home Assistant specifically, [docs/home-assistant.md](docs/home-assistant.md) has a
+webhook setup that turns each sensor into a battery entity you can put on a dashboard and
+alert on.
 
-```sh
-source tools/load-signing.sh
-gradle assembleRelease
-tools/package-release.sh
-```
+## Building it yourself
 
-Without the keystore the release build is simply left unsigned, so a clone without the key
-still builds. `tools/package-release.sh` refuses to package an unsigned APK rather than
-publish a release that fails to install for everyone who downloads it.
+See [docs/development.md](docs/development.md).
 
-## Trying it without a ride
+## Licence
 
-Run the throwaway receiver on your machine and point the extension at it:
+Apache-2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
-```sh
-python3 tools/echo-server.py 8080     # then use http://<lan-ip>:8080/
-```
-
-Then in the Saftladen app on the Karoo: set the URL, **Save settings**, **Send test report
-now**. You can also assign the *Send battery report* bonus action to a controller button to
-trigger a report mid-ride.
-
-## Home Assistant as the endpoint
-
-A webhook is the right fit: the webhook id *is* the credential, so Saftladen's auth header
-fields stay empty. (The REST API at `/api/states/…` is not usable here — it expects a
-`{"state": …, "attributes": …}` body, and Saftladen posts its own shape.)
-
-Pick a long random id, put it in `secrets.yaml` as `karoo_webhook_id`, and add one
-trigger-based template sensor per device:
-
-```yaml
-# configuration.yaml
-template:
-  - triggers:
-      - trigger: webhook
-        webhook_id: !secret karoo_webhook_id
-        allowed_methods: [POST]
-        local_only: false
-    sensor:
-      # The head unit — the one reading that is a real percentage.
-      - name: Karoo battery
-        unique_id: karoo_battery
-        state: "{{ trigger.json.karoo.batteryPercent }}"
-        # `is number` rejects both a null level and a field that is absent entirely
-        # (an older report, a future schema); `is not none` would let the latter through.
-        availability: "{{ trigger.json.karoo.batteryPercent is number }}"
-        unit_of_measurement: "%"
-        device_class: battery
-        state_class: measurement
-        attributes:
-          reported_at: "{{ trigger.json.createdAt }}"
-          report_trigger: "{{ trigger.json.trigger }}"
-          sensors: "{{ trigger.json.sensors }}"
-
-      # One entity per sensor, matched on the name Karoo shows in its sensor list.
-      # Karoo reports a bucket, not a percentage, so the bucket is mapped to the bottom
-      # of its range: that makes `device_class: battery` work (proper battery icon, %,
-      # battery cards) without ever overstating the charge. The real word is kept in
-      # the `status` attribute. Anything unmapped — INVALID, a battery that was never
-      # reported, a name that matches nothing — renders as `unknown`.
-      - name: Heart rate battery
-        unique_id: karoo_hr_battery
-        unit_of_measurement: "%"
-        device_class: battery
-        state_class: measurement
-        state: >
-          {% set s = trigger.json.sensors | selectattr('name', 'eq', 'Herzfrequenz 503512')
-             | map(attribute='battery') | first | default('', true) %}
-          {{- {'NEW': 96, 'GOOD': 81, 'OK': 46, 'LOW': 16, 'CRITICAL': 1}.get(s, 'unknown') }}
-        attributes:
-          status: >
-            {{ trigger.json.sensors | selectattr('name', 'eq', 'Herzfrequenz 503512')
-               | map(attribute='battery') | first | default('unknown', true) }}
-
-      - name: Di2 battery
-        unique_id: karoo_di2_battery
-        unit_of_measurement: "%"
-        device_class: battery
-        state_class: measurement
-        state: >
-          {% set s = trigger.json.sensors | selectattr('name', 'eq', 'Di2 1249')
-             | map(attribute='battery') | first | default('', true) %}
-          {{- {'NEW': 96, 'GOOD': 81, 'OK': 46, 'LOW': 16, 'CRITICAL': 1}.get(s, 'unknown') }}
-        attributes:
-          status: >
-            {{ trigger.json.sensors | selectattr('name', 'eq', 'Di2 1249')
-               | map(attribute='battery') | first | default('unknown', true) }}
-
-      - name: Power meter battery
-        unique_id: karoo_power_battery
-        unit_of_measurement: "%"
-        device_class: battery
-        state_class: measurement
-        state: >
-          {% set s = trigger.json.sensors | selectattr('name', 'eq', 'ASSIOMA31241L')
-             | map(attribute='battery') | first | default('', true) %}
-          {{- {'NEW': 96, 'GOOD': 81, 'OK': 46, 'LOW': 16, 'CRITICAL': 1}.get(s, 'unknown') }}
-        attributes:
-          status: >
-            {{ trigger.json.sensors | selectattr('name', 'eq', 'ASSIOMA31241L')
-               | map(attribute='battery') | first | default('unknown', true) }}
-
-      - name: Radar battery
-        unique_id: karoo_radar_battery
-        unit_of_measurement: "%"
-        device_class: battery
-        state_class: measurement
-        state: >
-          {% set s = trigger.json.sensors | selectattr('name', 'eq', 'Radar 20031')
-             | map(attribute='battery') | first | default('', true) %}
-          {{- {'NEW': 96, 'GOOD': 81, 'OK': 46, 'LOW': 16, 'CRITICAL': 1}.get(s, 'unknown') }}
-        attributes:
-          status: >
-            {{ trigger.json.sensors | selectattr('name', 'eq', 'Radar 20031')
-               | map(attribute='battery') | first | default('unknown', true) }}
-
-      - name: Rear light battery
-        unique_id: karoo_light_battery
-        unit_of_measurement: "%"
-        device_class: battery
-        state_class: measurement
-        state: >
-          {% set s = trigger.json.sensors | selectattr('name', 'eq', 'Leicht 20031')
-             | map(attribute='battery') | first | default('', true) %}
-          {{- {'NEW': 96, 'GOOD': 81, 'OK': 46, 'LOW': 16, 'CRITICAL': 1}.get(s, 'unknown') }}
-        attributes:
-          status: >
-            {{ trigger.json.sensors | selectattr('name', 'eq', 'Leicht 20031')
-               | map(attribute='battery') | first | default('unknown', true) }}
-
-      - name: Speed sensor battery
-        unique_id: karoo_speed_battery
-        unit_of_measurement: "%"
-        device_class: battery
-        state_class: measurement
-        state: >
-          {% set s = trigger.json.sensors | selectattr('name', 'eq', 'Geschwindigkeit 24769')
-             | map(attribute='battery') | first | default('', true) %}
-          {{- {'NEW': 96, 'GOOD': 81, 'OK': 46, 'LOW': 16, 'CRITICAL': 1}.get(s, 'unknown') }}
-        attributes:
-          status: >
-            {{ trigger.json.sensors | selectattr('name', 'eq', 'Geschwindigkeit 24769')
-               | map(attribute='battery') | first | default('unknown', true) }}
-
-      # Anything that needs charging, so one automation covers the whole bike.
-      - name: Bike batteries needing attention
-        unique_id: karoo_batteries_low
-        icon: mdi:battery-alert-variant-outline
-        state: >
-          {{ trigger.json.sensors
-             | selectattr('battery', 'in', ['LOW', 'CRITICAL'])
-             | map(attribute='name') | list | join(', ') | default('none', true) }}
-```
-
-**If you already have a `template:` key, add the whole thing as a new list item** — do not
-merge it into an existing one. Two rules decide the shape, and breaking either fails
-quietly:
-
-* `triggers:` and `sensor:` must be **sibling keys of the same list item**. A `- triggers:`
-  item with no entity domain is an orphan; HA logs *"Incomplete template configuration"*
-  and the entities never appear. (A warning today, a hard error from Core 2026.5.)
-* Everything in a block with `triggers:` updates **only** when that trigger fires. Moving
-  an existing state-based sensor under the webhook would freeze it between rides — so keep
-  state-based entities in their own item, without a trigger.
-
-```yaml
-template:
-  - sensor:                  # existing, state-based — leave it alone
-    - name: Something else
-      state: "{{ states('sensor.x') }}"
-
-  - triggers:                # new item: trigger and entities together
-    - trigger: webhook
-      webhook_id: !secret karoo_webhook_id
-    sensor:                  # sibling of `triggers`, not nested inside it
-    - name: Karoo battery
-```
-
-In the Saftladen app set the URL to
-`http://homeassistant.local:8123/api/webhook/<your-webhook-id>` and leave both auth header
-fields blank. Reload templates (or restart HA) before testing.
-
-To add a sensor, copy a block and change the name — take it verbatim from a delivered
-report (`"name"`), not from memory. A name that matches nothing yields `unknown` rather
-than an error, so if an entity is stuck at `unknown`, that is the first thing to check.
-Renaming a sensor on the Karoo changes the name here too.
-
-**Home Assistant answers `200 OK` even when it did nothing with your report.** Checked
-against [`webhook/__init__.py`][ha-webhook]: an unregistered id and an exception inside the
-handler both return `200`. Saftladen treats any 2xx as delivered and deletes the report,
-so a typo in the webhook id silently throws every report away. Before trusting it:
-
-```sh
-curl -i -X POST -H 'Content-Type: application/json' \
-  -d '{"karoo":{"batteryPercent":42},"sensors":[]}' \
-  http://homeassistant.local:8123/api/webhook/<your-webhook-id>
-```
-
-then confirm `sensor.karoo_battery` actually moved, and check the HA log for
-`Received message for unregistered webhook`. A 200 on its own proves nothing.
-
-[ha-webhook]: https://github.com/home-assistant/core/blob/dev/homeassistant/components/webhook/__init__.py
-
-## Notes and limits
-
-Checked on a Karoo 2 (`k24`, Android 12): the Karoo System binds the extension service as
-soon as the APK is installed, `RideState` arrives on subscribe, and a report with six
-sensors (ANT+, BLE and an extension-provided Di2) was delivered over wifi and, with the
-endpoint down, buffered and retried. A live ride confirmed the end-of-ride path: Karoo
-goes `Recording` → `Paused(auto=true)` → `Paused(auto=false)` → `Idle` when a stationary
-ride is ended, which is why any `Paused` counts as "was riding".
-
-* The Karoo System binds extension services while they are installed and enabled; that is
-  what keeps the ride-state subscription alive. The extension does not run a foreground
-  service of its own.
-* **Discarded rides report too, on purpose.** Karoo reports plain `RideState.Idle` for
-  both a saved and a discarded ride, so the two are indistinguishable here — and that is
-  fine: a battery reading taken at the end of an abandoned ride is still a true reading.
-  Reports carry a `reportId`, so a consumer that considers this a duplicate can drop it.
-  Suppressing it would mean declaring `fitFile="true"` and hooking `startFit` to learn
-  whether an activity was actually committed; don't take that on without a reason.
-* `applicationId` is `io.github.hamann.saftladen`; rename it (and the `MAIN` action in
-  `AndroidManifest.xml`) if you publish under a different account.
+Built against [karoo-ext](https://github.com/hammerheadnav/karoo-ext). Hammerhead and
+Karoo are trademarks of Hammerhead/SRAM. This project is not affiliated with or endorsed
+by them.

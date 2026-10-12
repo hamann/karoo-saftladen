@@ -1,0 +1,14 @@
+karoo-saftladen
+Copyright 2026 Holger Amann
+
+Built against karoo-ext (Apache-2.0), copyright SRAM LLC.
+https://github.com/hammerheadnav/karoo-ext
+
+Battery levels, the saved sensor list and the head unit's charge are read from
+the Karoo System through that library; the coarse battery vocabulary
+(NEW/GOOD/OK/LOW/CRITICAL/INVALID) and its percentage thresholds are
+karoo-ext's, used as facts about an interface rather than as copied source.
+
+Hammerhead and Karoo are trademarks of Hammerhead/SRAM. Home Assistant is a
+trademark of the Home Assistant project. This project is not affiliated with or
+endorsed by either.
